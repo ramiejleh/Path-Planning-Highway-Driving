@@ -10,7 +10,7 @@ sudo chmod u+x {simulator_file_name}
 ```
 
 ### Goals
-In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
+In this project the goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. The car's localization and sensor fusion data is provided, there is also a sparse map list of waypoints around the highway. The car tries to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car avoids hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car is able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
 #### The map of the highway is in data/highway_map.txt
 Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
@@ -59,16 +59,6 @@ the path has processed since last time.
 
 ["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
 
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
-
 ---
 
 ## Dependencies
@@ -92,54 +82,64 @@ A really helpful resource for doing this project and creating smooth trajectorie
     git checkout e94b6e1
     ```
 
-## Editor Settings
+## Traffic Analysis
+Here is a little bit of text about how the problem is approached.
+Starting with some traffic analysis using the data from the sensor fusion. looping over the data and to see if there is any car in front of the ego car that is slowing down to less than ego car's speed (which in most cases is max speed). If there is then the ego car matches the car's speed to avoid a collision. After that the other lanes are checked to see if any of them have an empty space. That empty space should be within a safe distance. Available options are marked.
+```c++
+   // Get car speed
+    car_speed = fabs(car_speed);
+    // loop over all detected cars from sensor fusion
+    for (int i = 0; i < sensor_fusion.size(); ++i){
+        // check to see if there are other cars in ego car's lane slower than ego car's speed
+        // check if the car is in the same lane
+        if ((lane_id*lane_width < sensor_fusion[i][6]) && (sensor_fusion[i][6] < (lane_id+1)*lane_width)) {
+            // check if the car is in front is closer than the end of the previous path plus a safety distance             
+            if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > (car_s - 5.0))) {
+                // calculate other cars absolute speed             
+                front_car_speed = std::sqrt(pow(sensor_fusion[i][3],2.0) + pow(sensor_fusion[i][4],2.0) ); 
+                const double front_car_speed_in_mph = front_car_speed* 2.23694;
+                // calculate the diference in speed between the two cars
+                delta_speed = car_speed - front_car_speed_in_mph;
+                // if the car is going slower than ego car's speed, match its speed
+                if (delta_speed > 0.0){
+                    goal_speed = front_car_speed_in_mph;
+                    should_match_speed = true;
+                } 
+            }
+        }
+        
+        // check for cars at left lane in case of switching lanes
+        if ((lane_id > 0) && ((lane_id - 1)*lane_width < sensor_fusion[i][6]) && (sensor_fusion[i][6] < lane_id*lane_width)) {
+            if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance/2)) { 
+                is_left_clear = false;
+            }            
+        }
+        
+        // check for cars at right lane in case of switching lanes        
+        if ((lane_id < 2) && ((lane_id+1)*lane_width < sensor_fusion[i][6]) && (sensor_fusion[i][6] < (lane_id+2)*lane_width) ) {
+            if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance/2)) {
+                is_right_clear = false;
+            } 
+        }            
+    }        
+              
+```
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+After having the choices marked as valid or invalid, a check is made to see if a lane change is needed. The check consists of determining if there is actually a slower car in front of the ego car and that the ego car is not already in the middle of a lane change. Plus checking if the ego car's speed is less than 90% of the max speed as there is no need to change lanes otherwise. Changing lanes to the left is prefferable.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
-
+```c++
+    // if the car in front slowed ego car down too much, change lanes if a lane change is not already in progress
+    if ((should_match_speed == true) && (change_lane == false)) {
+        change_lane = true;
+    }
+    // Changing lanes and always preferring left
+    if(car_speed < (.9 * max_speed) && change_lane == true) {
+        if (lane_id > 0 && is_left_clear == true) {
+            lane_id = lane_id - 1;
+            change_lane = false;
+        } else if (lane_id < 2 && is_right_clear == true) {
+            lane_id = lane_id + 1;
+            change_lane = false;
+        } 
+    }
+```
