@@ -150,14 +150,14 @@ int main() {
             
             // check for cars at left lane in case of switching lanes
             if ((lane_id > 0) && ((lane_id - 1)*lane_width < sensor_fusion[i][6]) && (sensor_fusion[i][6] < lane_id*lane_width)) {
-              if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance/2)) { 
+              if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance)) { 
                 is_left_clear = false;
               }            
             }
             
             // check for cars at right lane in case of switching lanes        
             if ((lane_id < 2) && ((lane_id+1)*lane_width < sensor_fusion[i][6]) && (sensor_fusion[i][6] < (lane_id+2)*lane_width) ) {
-              if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance/2)) {
+              if ((sensor_fusion[i][5] < (end_path_s + safety_distance)) && (sensor_fusion[i][5] > car_s - safety_distance)) {
                 is_right_clear = false;
               } 
             }            
