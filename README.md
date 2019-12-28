@@ -82,7 +82,7 @@ the path has processed since last time.
     git checkout e94b6e1
     ```
 
-## Traffic Analysis
+## Traffic Analysis and Path Planing
 Here is a little bit of text about how the problem is approached.
 Starting with some traffic analysis using the data from the sensor fusion. looping over the data and to see if there is any car in front of the ego car that is slowing down to less than ego car's speed (which in most cases is max speed). If there is then the ego car matches the car's speed to avoid a collision. After that the other lanes are checked to see if any of them have an empty space. That empty space should be within a safe distance. Available options are marked.
 ```c++
@@ -141,5 +141,16 @@ After having the choices marked as valid or invalid, a check is made to see if a
             lane_id = lane_id + 1;
             change_lane = false;
         } 
+    }
+```
+
+The speed is then adjusted either by increasing, decreasing or keeping at the same level as before depending on the current ego car's speed compared with max speed as follows
+
+```c++
+    // approach the goal speed which is either max speed or the speed of a slower car in front
+    if ((car_speed > goal_speed) && (car_speed > 0.0)) {
+        auto_speed -= max_acceleration;
+    } else if ((car_speed < goal_speed) && (goal_speed <= max_speed)) {
+        auto_speed += max_acceleration;            
     }
 ```
